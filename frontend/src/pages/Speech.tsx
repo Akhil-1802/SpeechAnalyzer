@@ -2,11 +2,13 @@ import { useRef, useState, useEffect } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
 import { generateUniqueId } from "../utils/helper";
+import { useParams } from "react-router-dom";
 
 const MAX_SECONDS = 300;
 const DEFAULT_SECONDS = 60;
 
 function Speech() {
+  const {topic } = useParams();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -34,6 +36,7 @@ function Speech() {
     const audioBlob = new Blob(chunks, { type: "audio/webm" });
     const formData = new FormData();
     formData.append("file", audioBlob, `${generateUniqueId()}.webm`);
+    formData.append("topic" , topic ?? "general");
     try {
       const res = await axios.post("http://127.0.0.1:8000/upload-audio", formData);
       setTranscript(res.data?.transcript ?? "No transcript returned.");

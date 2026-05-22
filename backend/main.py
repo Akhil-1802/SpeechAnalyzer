@@ -1,9 +1,14 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
+from dotenv import load_dotenv
+from db.db import speeches_collection
+from db.redis_client import redis_client, SPEECH_QUEUE
+from models.speech import SpeechRecord
 import shutil
 import os
 
+load_dotenv()
 app = FastAPI()
 
 origins = [
@@ -23,20 +28,27 @@ model = WhisperModel("base")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.post("/upload-audio")
-async def upload_audio(file: UploadFile = File(...)):
-
+async def upload_audio(
+    file: UploadFile = File(...),
+    topic: str = Form(default=None),
+):
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    segments, info = model.transcribe(file_path)
 
-    transcript = ""
+    segments, _ = model.transcribe(file_path)
+    transcript = "".join(segment.text for segment in segments).strip()
 
-    for segment in segments:
-        transcript += segment.text + " "
-    print(transcript)
+    record = SpeechRecord(transcript=transcript, topic=topic)
+    result = await speeches_collection.insert_one(
+        record.model_dump(exclude={"id"}, by_alias=False)
+    )
+    doc_id = str(result.inserted_id)
+    await redis_client.lpush(SPEECH_QUEUE, doc_id)
+
     return {
         "message": "Audio uploaded successfully",
-        "transcript": transcript
+        "transcript": transcript,
+        "record_id": doc_id,
     }
