@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 
 interface Result {
   transcript: string;
@@ -77,6 +78,7 @@ export default function Result() {
   const { record_id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { transcript: initialTranscript, topic } = (location.state ?? {}) as { transcript?: string; topic?: string };
 
   const [result, setResult] = useState<Result | null>(null);
@@ -94,7 +96,9 @@ export default function Result() {
     if (!record_id) return;
     const poll = async () => {
       try {
-        const res = await axios.get(`http://127.0.0.1:8000/result/${record_id}`);
+        const res = await axios.get(`http://127.0.0.1:8000/result/${record_id}`, {
+          headers: { Authorization: `Bearer ${user?.token}` },
+        });
         if (res.data.ready) {
           setResult(res.data);
         }

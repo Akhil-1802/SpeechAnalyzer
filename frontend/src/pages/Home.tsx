@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 const SUMMARY_API = 'https://en.wikipedia.org/api/rest_v1/page/random/summary'
 
@@ -30,6 +31,7 @@ function stripMarkup(text = '') {
 
 function Home() {
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const [topic, setTopic] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(false)
   const [revealed, setRevealed] = useState(false)
@@ -158,10 +160,21 @@ function Home() {
           <div className="hidden md:flex items-center gap-8 text-sm text-white/50 font-medium">
             <a href="#" className="hover:text-amber-400 transition-colors">Explore</a>
             <a href="#" className="hover:text-amber-400 transition-colors">Practice</a>
-            <a href="#" className="hover:text-amber-400 transition-colors">Progress</a>
-            <button className="px-4 py-2 rounded-full border border-white/10 hover:border-amber-400/50 hover:text-white transition-all text-white/70">
-              Sign in
-            </button>
+            {user ? (
+              <>
+                <button onClick={() => navigate('/history')} className="hover:text-amber-400 transition-colors">History</button>
+                <span className="text-white/30 text-xs">Hi, {user.name.split(' ')[0]}</span>
+                <button onClick={() => { logout(); navigate('/'); }}
+                  className="px-4 py-2 rounded-full border border-white/10 hover:border-red-400/50 hover:text-red-400 transition-all text-white/70 text-xs">
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button onClick={() => navigate('/auth')}
+                className="px-4 py-2 rounded-full border border-white/10 hover:border-amber-400/50 hover:text-white transition-all text-white/70">
+                Sign in
+              </button>
+            )}
           </div>
         </motion.nav>
 
