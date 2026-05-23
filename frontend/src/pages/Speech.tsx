@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
 import { generateUniqueId } from "../utils/helper";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 
 const MAX_SECONDS = 300;
 const DEFAULT_SECONDS = 60;
@@ -13,10 +13,10 @@ function Speech() {
   const audioChunksRef = useRef<Blob[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const navigate = useNavigate();
   const [totalSeconds, setTotalSeconds] = useState(DEFAULT_SECONDS);
   const [remaining, setRemaining] = useState(DEFAULT_SECONDS);
   const [recording, setRecording] = useState(false);
-  const [transcript, setTranscript] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fmt = (s: number) =>
@@ -36,19 +36,20 @@ function Speech() {
     const audioBlob = new Blob(chunks, { type: "audio/webm" });
     const formData = new FormData();
     formData.append("file", audioBlob, `${generateUniqueId()}.webm`);
-    formData.append("topic" , topic ?? "general");
+    formData.append("topic", topic ?? "general");
     try {
       const res = await axios.post("http://127.0.0.1:8000/upload-audio", formData);
-      setTranscript(res.data?.transcript ?? "No transcript returned.");
-    } catch {
-      setTranscript("Failed to get transcript. Please try again.");
+      navigate(`/result/${res.data.record_id}`, {
+        state: { transcript: res.data.transcript, topic: topic ?? "general" },
+      });
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const startRecording = async () => {
     try {
-      setTranscript(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -251,28 +252,13 @@ function Speech() {
           )}
         </motion.div>
 
-        {/* Transcript / Loading */}
-        {(loading || transcript) && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card-glass rounded-2xl max-w-2xl w-full p-8 flex flex-col gap-4"
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              <span className="text-amber-400 text-xs font-semibold tracking-widest uppercase">Transcript</span>
-            </div>
-            {loading ? (
-              <div className="flex items-center gap-3 text-white/40 text-sm">
-                <svg className="w-4 h-4 animate-spin text-amber-400" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-                Analyzing your speech…
-              </div>
-            ) : (
-              <p className="text-white/80 text-base leading-8 font-light">{transcript}</p>
-            )}
+        {loading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 text-white/40 text-sm">
+            <svg className="w-4 h-4 animate-spin text-amber-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            Uploading & transcribing…
           </motion.div>
         )}
       </div>
