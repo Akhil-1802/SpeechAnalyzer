@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -52,8 +52,8 @@ function Home() {
       )
       const sectionsData = await sectionsRes.json()
       const pages = sectionsData.query?.pages || {}
-      const page = Object.values(pages)[0]
-      const fullText = page?.extract || summary.extract || ''
+      const page = Object.values(pages)[0] as { extract?: string } | undefined
+      const fullText = page?.extract || (summary as { extract?: string }).extract || ''
 
       // Split into paragraphs, filter blanks, take enough for ~600+ words
       const paragraphs = fullText
