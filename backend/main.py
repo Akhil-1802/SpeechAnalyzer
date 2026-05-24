@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
 from dotenv import load_dotenv
@@ -7,15 +7,23 @@ from pydantic import BaseModel
 from db.db import speeches_collection, users_collection
 from db.redis_client import redis_client, SPEECH_QUEUE
 from models.speech import SpeechRecord
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from auth import hash_password, verify_password, create_token, get_current_user
 import asyncio, shutil, os
 
 load_dotenv()
 app = FastAPI()
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "https://speechanalyzer.netlify.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,7 +47,8 @@ class LoginBody(BaseModel):
 
 
 @app.post("/auth/register", status_code=201)
-async def register(body: RegisterBody):
+@limiter.limit("5/minute")
+async def register(request: Request, body: RegisterBody):
     if await users_collection.find_one({"email": body.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
     result = await users_collection.insert_one({
@@ -52,7 +61,8 @@ async def register(body: RegisterBody):
 
 
 @app.post("/auth/login")
-async def login(body: LoginBody):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginBody):
     user = await users_collection.find_one({"email": body.email})
     if not user or not verify_password(body.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -72,7 +82,9 @@ async def delete_after_delay(path: str, delay: int = 600):
 
 
 @app.post("/upload-audio")
+@limiter.limit("5/minute")
 async def upload_audio(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     topic: str = Form(default=None),
@@ -101,7 +113,8 @@ async def upload_audio(
 # ── Result polling ────────────────────────────────────────────────────────────
 
 @app.get("/result/{record_id}")
-async def get_result(record_id: str, current_user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def get_result(request: Request, record_id: str, current_user: dict = Depends(get_current_user)):
     doc = await speeches_collection.find_one({"_id": ObjectId(record_id)})
     if not doc:
         return {"ready": False}
@@ -120,7 +133,8 @@ async def get_result(record_id: str, current_user: dict = Depends(get_current_us
 # ── History ───────────────────────────────────────────────────────────────────
 
 @app.get("/history")
-async def get_history(current_user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def get_history(request: Request, current_user: dict = Depends(get_current_user)):
     cursor = speeches_collection.find(
         {"user_id": current_user["id"], "score": {"$ne": None}},
         {"transcript": 1, "topic": 1, "score": 1, "summary": 1, "feedback": 1, "created_at": 1}

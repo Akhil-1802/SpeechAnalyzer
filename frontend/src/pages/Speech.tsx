@@ -158,6 +158,19 @@ function Speech() {
           {recording ? "Recording…" : "Speech Practice"}
         </motion.div>
 
+        {/* Topic name */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="text-center px-4"
+        >
+          <h1 className="font-['Playfair_Display',serif] text-2xl md:text-3xl font-bold text-glow leading-tight">
+            {topic}
+          </h1>
+          <p className="text-white/30 text-xs mt-1 tracking-wide">Your topic — speak about this</p>
+        </motion.div>
+
         {/* Timer ring */}
         <motion.div
           initial={{ opacity: 0, scale: 0.85 }}
