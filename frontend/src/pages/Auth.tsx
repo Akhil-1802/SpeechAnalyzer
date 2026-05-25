@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import API_BASE from "../config";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;900&family=Playfair+Display:ital,wght@0,700;1,400&display=swap');
@@ -34,7 +35,7 @@ export default function Auth() {
     try {
       const url = mode === "login" ? "/auth/login" : "/auth/register";
       const body = mode === "login" ? { email, password } : { name, email, password };
-      const res = await axios.post(`http://127.0.0.1:8000${url}`, body);
+      const res = await axios.post(`${API_BASE}${url}`, body);
       login({ name: res.data.name, email: res.data.email, token: res.data.token });
       navigate("/");
     } catch (e: any) {

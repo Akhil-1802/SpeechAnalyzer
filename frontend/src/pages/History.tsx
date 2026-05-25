@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import API_BASE from "../config";
 
 interface SpeechEntry {
   id: string;
@@ -57,7 +58,7 @@ export default function History() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    axios.get("http://127.0.0.1:8000/history", {
+    axios.get(`${API_BASE}/history`, {
       headers: { Authorization: `Bearer ${user?.token}` },
     }).then(r => setSpeeches(r.data)).finally(() => setLoading(false));
   }, []);

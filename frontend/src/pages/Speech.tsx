@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { generateUniqueId } from "../utils/helper";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import API_BASE from "../config";
 
 const MAX_SECONDS = 300;
 const DEFAULT_SECONDS = 60;
@@ -40,7 +41,7 @@ function Speech() {
     formData.append("file", audioBlob, `${generateUniqueId()}.webm`);
     formData.append("topic", topic ?? "general");
     try {
-      const res = await axios.post("http://127.0.0.1:8000/upload-audio", formData, {
+      const res = await axios.post(`${API_BASE}/upload-audio`, formData, {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
       navigate(`/result/${res.data.record_id}`, {

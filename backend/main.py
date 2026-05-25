@@ -23,8 +23,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://speechanalyzer.netlify.app"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,6 +32,11 @@ app.add_middleware(
 UPLOAD_DIR = "uploads"
 model = WhisperModel("base")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
