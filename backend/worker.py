@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import json
+from aiohttp import web
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -9,6 +10,7 @@ from bson import ObjectId
 from db.redis_client import redis_client, SPEECH_QUEUE
 from db.db import speeches_collection
 from helper.model import generate_response
+
 
 async def process(doc_id: str):
     doc = await speeches_collection.find_one({"_id": ObjectId(doc_id)})
@@ -21,7 +23,6 @@ async def process(doc_id: str):
     raw = await generate_response(doc.get("topic"), doc.get("transcript"))
 
     try:
-        # strip markdown code fences if present
         cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         result = json.loads(cleaned)
     except json.JSONDecodeError:
@@ -39,17 +40,45 @@ async def process(doc_id: str):
     )
     print(f"[worker] saved score={result.get('score')} for doc_id={doc_id}")
 
-async def main():
+
+async def queue_loop():
     print(f"[worker] listening on queue '{SPEECH_QUEUE}' ...")
     while True:
-        # brpop blocks until an item is available (timeout=0 = forever)
-        item = await redis_client.brpop(SPEECH_QUEUE, timeout=0)
-        if item:
-            _, doc_id = item
-            try:
-                await process(doc_id)
-            except Exception as e:
-                print(f"[worker] error processing {doc_id}: {e}")
+        try:
+            item = await redis_client.brpop(SPEECH_QUEUE, timeout=0)
+            if item:
+                _, doc_id = item
+                try:
+                    await process(doc_id)
+                except Exception as e:
+                    print(f"[worker] error processing {doc_id}: {e}")
+        except Exception as e:
+            print(f"[worker] queue error: {e}")
+            await asyncio.sleep(3)
+
+
+async def health(request):
+    return web.Response(text="ok")
+
+
+async def main():
+    # Start the Redis queue loop as a background task
+    asyncio.create_task(queue_loop())
+
+    # Start a minimal HTTP server so Render detects an open port
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+
+    port = int(os.getenv("PORT", 8001))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"[worker] health server on 0.0.0.0:{port}")
+
+    # Keep running forever
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
