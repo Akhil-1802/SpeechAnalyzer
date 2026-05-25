@@ -92,22 +92,29 @@ export default function Result() {
     return () => clearInterval(t);
   }, [result]);
 
-  // Poll backend every 3s until worker is done
+  // Poll backend every 5s until worker is done
   useEffect(() => {
     if (!record_id) return;
+    let stopped = false;
+
     const poll = async () => {
       try {
         const res = await axios.get(`${API_BASE}/result/${record_id}`, {
           headers: { Authorization: `Bearer ${user?.token}` },
         });
-        if (res.data.ready) {
+        console.log("[poll] response:", res.data);
+        if (res.data.ready && !stopped) {
+          stopped = true;
           setResult(res.data);
         }
-      } catch { /* keep polling */ }
+      } catch (e) {
+        console.error("[poll] error:", e);
+      }
     };
+
     poll();
-    const interval = setInterval(poll, 3000);
-    return () => clearInterval(interval);
+    const interval = setInterval(poll, 5000);
+    return () => { stopped = true; clearInterval(interval); };
   }, [record_id]);
 
   const scoreColor = result

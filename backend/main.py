@@ -141,13 +141,16 @@ async def upload_audio(
 async def get_result(request: Request, record_id: str, current_user: dict = Depends(get_current_user)):
     doc = await speeches_collection.find_one({"_id": ObjectId(record_id)})
     if not doc:
+        print(f"[result] doc {record_id} not found")
         return {"ready": False}
-    if doc.get("score") is None:
+    score = doc.get("score")
+    print(f"[result] doc {record_id} score={score}")
+    if score is None:
         return {"ready": False}
     return {
         "ready": True,
         "transcript": doc.get("transcript"),
-        "score": doc.get("score"),
+        "score": score,
         "summary": doc.get("summary"),
         "feedback": doc.get("feedback"),
         "topic": doc.get("topic"),
