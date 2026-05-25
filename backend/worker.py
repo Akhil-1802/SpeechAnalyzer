@@ -7,62 +7,84 @@ from aiohttp import web
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from bson import ObjectId
-from db.redis_client import redis_client, SPEECH_QUEUE
 from db.db import speeches_collection
 from helper.model import generate_response
 
 
-async def process(doc_id: str):
-    doc = await speeches_collection.find_one({"_id": ObjectId(doc_id)})
-    if not doc:
-        print(f"[worker] doc {doc_id} not found in MongoDB", flush=True)
-        return
-
+async def process(doc: dict):
+    doc_id = str(doc["_id"])
     print(f"[worker] processing doc_id={doc_id} | topic={doc.get('topic')}", flush=True)
 
     raw = await generate_response(doc.get("topic"), doc.get("transcript"))
+    print(f"[worker] raw response: {raw[:200]}", flush=True)
+
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        print(f"[worker] no JSON found in response, storing raw feedback", flush=True)
+        await speeches_collection.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"score": 1, "summary": "Could not parse AI response", "feedback": raw}},
+        )
+        return
 
     try:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        result = json.loads(cleaned)
-    except json.JSONDecodeError:
-        print(f"[worker] could not parse JSON response: {raw}", flush=True)
+        result = json.loads(raw[start:end])
+    except json.JSONDecodeError as e:
+        print(f"[worker] JSON parse error: {e}", flush=True)
+        await speeches_collection.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"score": 1, "summary": "Could not parse AI response", "feedback": raw}},
+        )
         return
+    score = result.get("score", 1)
+    # Ensure score is never None or -1 (reserved values)
+    if score is None or score < 0:
+        score = 1
 
     await speeches_collection.update_one(
-        {"_id": ObjectId(doc_id)},
+        {"_id": doc["_id"]},
         {"$set": {
-            "score": result.get("score"),
-            "summary": result.get("summary"),
-            "feedback": result.get("feedback"),
-            "content_sufficiency": result.get("content_sufficiency"),
+            "score": score,
+            "summary": result.get("summary", ""),
+            "feedback": result.get("feedback", ""),
+            "content_sufficiency": result.get("content_sufficiency", ""),
         }},
     )
-    print(f"[worker] saved score={result.get('score')} for doc_id={doc_id}", flush=True)
+    print(f"[worker] done — score={score} for doc_id={doc_id}", flush=True)
 
 
-async def queue_loop():
-    print("[worker] checking Redis connection...", flush=True)
-    try:
-        await redis_client.ping()
-        print("[worker] Redis connected OK", flush=True)
-    except Exception as e:
-        print(f"[worker] Redis FAILED: {e} | REDIS_URL={os.getenv('REDIS_URL', 'NOT SET')}", flush=True)
-        return
-
-    print(f"[worker] listening on '{SPEECH_QUEUE}' ...", flush=True)
+async def poll_loop():
+    print("[worker] poll loop started", flush=True)
     while True:
         try:
-            item = await redis_client.brpop(SPEECH_QUEUE, timeout=5)
-            if item:
-                _, doc_id = item
-                print(f"[worker] picked up doc_id={doc_id}", flush=True)
-                await process(doc_id)
+            doc = await speeches_collection.find_one({
+                "transcript": {"$exists": True, "$ne": ""},
+                "score": None,
+            })
+
+            if doc:
+                # Claim it atomically
+                res = await speeches_collection.update_one(
+                    {"_id": doc["_id"], "score": None},
+                    {"$set": {"score": -1}},
+                )
+                if res.modified_count == 1:
+                    try:
+                        await process(doc)
+                    except Exception as e:
+                        print(f"[worker] error: {e}", flush=True)
+                        await speeches_collection.update_one(
+                            {"_id": doc["_id"], "score": -1},
+                            {"$set": {"score": None}},
+                        )
             else:
-                print("[worker] heartbeat — queue empty", flush=True)
+                print("[worker] heartbeat — no pending docs", flush=True)
+                await asyncio.sleep(5)
+
         except Exception as e:
-            print(f"[worker] queue error: {e} — retrying in 3s", flush=True)
-            await asyncio.sleep(3)
+            print(f"[worker] poll error: {e}", flush=True)
+            await asyncio.sleep(5)
 
 
 async def health(request):
@@ -84,10 +106,7 @@ async def run_http():
 
 async def main():
     print("[worker] starting...", flush=True)
-    await asyncio.gather(
-        queue_loop(),
-        run_http(),
-    )
+    await asyncio.gather(poll_loop(), run_http())
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ python-dotenv==1.2.2
 motor==3.7.1
 pymongo==4.17.0
 redis==7.4.0
-faster-whisper==1.2.1
+deepgram-sdk
 openai==2.38.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1

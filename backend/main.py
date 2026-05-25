@@ -1,18 +1,17 @@
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from faster_whisper import WhisperModel
 from dotenv import load_dotenv
 from bson import ObjectId
 from pydantic import BaseModel
 from db.db import speeches_collection, users_collection
-from db.redis_client import redis_client, SPEECH_QUEUE
 from models.speech import SpeechRecord
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from auth import hash_password, verify_password, create_token, get_current_user
-import asyncio, shutil, os, threading
+from deepgram import AsyncDeepgramClient
+import asyncio, shutil, os
 
 load_dotenv()
 app = FastAPI()
@@ -32,24 +31,7 @@ app.add_middleware(
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-_model = None
-_model_lock = threading.Lock()
-_model_ready = threading.Event()
-
-def _load_model():
-    global _model
-    print("[startup] loading whisper model...")
-    with _model_lock:
-        _model = WhisperModel("tiny", compute_type="int8")
-    _model_ready.set()
-    print("[startup] whisper model ready")
-
-# Load model in background thread so server starts instantly
-threading.Thread(target=_load_model, daemon=True).start()
-
-def get_model():
-    _model_ready.wait()  # blocks only if model not ready yet
-    return _model
+deepgram = AsyncDeepgramClient(api_key=os.getenv("DEEPGRAM_API_KEY", ""))
 
 
 @app.get("/")
@@ -121,15 +103,22 @@ async def upload_audio(
 
     background_tasks.add_task(delete_after_delay, file_path)
 
-    segments, _ = get_model().transcribe(file_path)
-    transcript = "".join(segment.text for segment in segments).strip()
+    with open(file_path, "rb") as f:
+        audio_data = f.read()
+
+    response = await deepgram.listen.v1.media.transcribe_file(
+        request=audio_data,
+        model="nova-2",
+        smart_format=True,
+        language="en",
+    )
+    transcript = response.results.channels[0].alternatives[0].transcript
 
     record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"])
     result = await speeches_collection.insert_one(
         record.model_dump(exclude={"id"}, by_alias=False)
     )
     doc_id = str(result.inserted_id)
-    await redis_client.lpush(SPEECH_QUEUE, doc_id)
 
     return {"message": "Audio uploaded successfully", "transcript": transcript, "record_id": doc_id}
 
@@ -145,7 +134,7 @@ async def get_result(request: Request, record_id: str, current_user: dict = Depe
         return {"ready": False}
     score = doc.get("score")
     print(f"[result] doc {record_id} score={score}")
-    if score is None:
+    if score is None or score == -1:
         return {"ready": False}
     return {
         "ready": True,
