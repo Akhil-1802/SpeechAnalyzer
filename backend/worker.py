@@ -45,15 +45,20 @@ async def queue_loop():
     print(f"[worker] listening on queue '{SPEECH_QUEUE}' ...")
     while True:
         try:
-            item = await redis_client.brpop(SPEECH_QUEUE, timeout=0)
+            # Use timeout=5 instead of 0 — managed Redis drops idle connections
+            # so we reconnect every 5s rather than hanging forever
+            item = await redis_client.brpop(SPEECH_QUEUE, timeout=5)
             if item:
                 _, doc_id = item
+                print(f"[worker] picked up doc_id={doc_id}")
                 try:
                     await process(doc_id)
                 except Exception as e:
                     print(f"[worker] error processing {doc_id}: {e}")
+            else:
+                print("[worker] heartbeat — queue empty, waiting...")
         except Exception as e:
-            print(f"[worker] queue error: {e}")
+            print(f"[worker] queue error: {e} — reconnecting in 3s")
             await asyncio.sleep(3)
 
 
