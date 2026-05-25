@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from auth import hash_password, verify_password, create_token, get_current_user
-import asyncio, shutil, os
+import asyncio, shutil, os, threading
 
 load_dotenv()
 app = FastAPI()
@@ -30,20 +30,30 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 _model = None
+_model_lock = threading.Lock()
+_model_ready = threading.Event()
+
+def _load_model():
+    global _model
+    print("[startup] loading whisper model...")
+    with _model_lock:
+        _model = WhisperModel("tiny", compute_type="int8")
+    _model_ready.set()
+    print("[startup] whisper model ready")
+
+# Load model in background thread so server starts instantly
+threading.Thread(target=_load_model, daemon=True).start()
 
 def get_model():
-    global _model
-    if _model is None:
-        print("[startup] loading whisper model...")
-        _model = WhisperModel("tiny", compute_type="int8")
-        print("[startup] whisper model loaded")
+    _model_ready.wait()  # blocks only if model not ready yet
     return _model
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @app.get("/")
+@app.head("/")
 async def root():
     return {"status": "ok"}
 
