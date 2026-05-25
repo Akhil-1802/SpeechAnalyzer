@@ -42,11 +42,18 @@ async def process(doc_id: str):
 
 
 async def queue_loop():
+    print("[worker] checking Redis connection...")
+    try:
+        await redis_client.ping()
+        print("[worker] Redis connected OK")
+    except Exception as e:
+        print(f"[worker] Redis connection FAILED: {e}")
+        print(f"[worker] REDIS_URL={os.getenv('REDIS_URL', 'NOT SET')}")
+        return
+
     print(f"[worker] listening on queue '{SPEECH_QUEUE}' ...")
     while True:
         try:
-            # Use timeout=5 instead of 0 — managed Redis drops idle connections
-            # so we reconnect every 5s rather than hanging forever
             item = await redis_client.brpop(SPEECH_QUEUE, timeout=5)
             if item:
                 _, doc_id = item
@@ -67,10 +74,9 @@ async def health(request):
 
 
 async def main():
-    # Start the Redis queue loop as a background task
+    print("[worker] starting up...")
     asyncio.create_task(queue_loop())
 
-    # Start a minimal HTTP server so Render detects an open port
     app = web.Application()
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
@@ -82,7 +88,6 @@ async def main():
     await site.start()
     print(f"[worker] health server on 0.0.0.0:{port}")
 
-    # Keep running forever
     await asyncio.Event().wait()
 
 
