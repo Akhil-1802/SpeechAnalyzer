@@ -30,7 +30,16 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = "uploads"
-model = WhisperModel("base")
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        print("[startup] loading whisper model...")
+        _model = WhisperModel("tiny", compute_type="int8")
+        print("[startup] whisper model loaded")
+    return _model
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
@@ -102,7 +111,7 @@ async def upload_audio(
 
     background_tasks.add_task(delete_after_delay, file_path)
 
-    segments, _ = model.transcribe(file_path)
+    segments, _ = get_model().transcribe(file_path)
     transcript = "".join(segment.text for segment in segments).strip()
 
     record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"])
