@@ -10,9 +10,3 @@ class User(BaseModel):
 
     class Config:
         populate_by_name = True
-
-
-class UserOut(BaseModel):
-    id: str
-    name: str
-    email: str

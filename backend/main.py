@@ -10,7 +10,6 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from auth import hash_password, verify_password, create_token, get_current_user
-from deepgram import AsyncDeepgramClient
 import asyncio, shutil, os
 from utils.transcript import audioTotext
 from helper.model import generate_response
@@ -32,8 +31,6 @@ app.add_middleware(
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-deepgram = AsyncDeepgramClient(api_key=os.getenv("DEEPGRAM_API_KEY", ""))
 
 
 @app.get("/")
@@ -80,7 +77,7 @@ async def login(request: Request, body: LoginBody):
 
 # ── Audio upload ──────────────────────────────────────────────────────────────
 
-async def delete_after_delay(path: str, delay: int = 600):
+async def delete_after_delay(path: str, delay: int = 300):
     await asyncio.sleep(delay)
     try:
         os.remove(path)
@@ -108,16 +105,8 @@ async def upload_audio(
     with open(file_path, "rb") as f:
         audio_data = f.read()
 
-    # response = await deepgram.listen.v1.media.transcribe_file(
-    #     request=audio_data,
-    #     model="nova-2",
-    #     smart_format=True,
-    #     language="en",
-    # )
-    # transcript = response.results.channels[0].alternatives[0].transcript
     transcript = audioTotext(file_path)
     result = await generate_response(topic,transcript)
-    print(result)
     record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"],score =result['score'] , summary = result['summary'],feedback = result['feedback'])
     final_result = await speeches_collection.insert_one(
         record.model_dump(exclude={"id"}, by_alias=False)
