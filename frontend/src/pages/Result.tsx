@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -84,6 +84,7 @@ export default function Result() {
 
   const [result, setResult] = useState<Result | null>(null);
   const [dots, setDots] = useState(".");
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Animate waiting dots
   useEffect(() => {
@@ -95,16 +96,17 @@ export default function Result() {
   // Poll backend every 5s until worker is done
   useEffect(() => {
     if (!record_id) return;
-    let stopped = false;
 
     const poll = async () => {
       try {
         const res = await axios.get(`${API_BASE}/result/${record_id}`, {
           headers: { Authorization: `Bearer ${user?.token}` },
         });
-        console.log("[poll] response:", res.data);
-        if (res.data.ready && !stopped) {
-          stopped = true;
+        if (res.data.ready) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
           setResult(res.data);
         }
       } catch (e) {
@@ -113,8 +115,13 @@ export default function Result() {
     };
 
     poll();
-    const interval = setInterval(poll, 5000);
-    return () => { stopped = true; clearInterval(interval); };
+    intervalRef.current = setInterval(poll, 5000);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [record_id]);
 
   const scoreColor = result

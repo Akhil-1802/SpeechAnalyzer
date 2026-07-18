@@ -12,6 +12,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from auth import hash_password, verify_password, create_token, get_current_user
 from deepgram import AsyncDeepgramClient
 import asyncio, shutil, os
+from utils.transcript import audioTotext
+from helper.model import generate_response
 
 load_dotenv()
 app = FastAPI()
@@ -106,20 +108,21 @@ async def upload_audio(
     with open(file_path, "rb") as f:
         audio_data = f.read()
 
-    response = await deepgram.listen.v1.media.transcribe_file(
-        request=audio_data,
-        model="nova-2",
-        smart_format=True,
-        language="en",
-    )
-    transcript = response.results.channels[0].alternatives[0].transcript
-
-    record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"])
-    result = await speeches_collection.insert_one(
+    # response = await deepgram.listen.v1.media.transcribe_file(
+    #     request=audio_data,
+    #     model="nova-2",
+    #     smart_format=True,
+    #     language="en",
+    # )
+    # transcript = response.results.channels[0].alternatives[0].transcript
+    transcript = audioTotext(file_path)
+    result = await generate_response(topic,transcript)
+    print(result)
+    record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"],score =result['score'] , summary = result['summary'],feedback = result['feedback'])
+    final_result = await speeches_collection.insert_one(
         record.model_dump(exclude={"id"}, by_alias=False)
     )
-    doc_id = str(result.inserted_id)
-
+    doc_id = str(final_result.inserted_id)
     return {"message": "Audio uploaded successfully", "transcript": transcript, "record_id": doc_id}
 
 
