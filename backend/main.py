@@ -81,7 +81,6 @@ async def delete_after_delay(path: str, delay: int = 300):
     await asyncio.sleep(delay)
     try:
         os.remove(path)
-        print(f"[cleanup] deleted {path}")
     except FileNotFoundError:
         pass
 
@@ -95,24 +94,17 @@ async def upload_audio(
     topic: str = Form(default=None),
     current_user: dict = Depends(get_current_user),
 ):
-    print("1. Endpoint hit")
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    print("2. File saved")
 
     background_tasks.add_task(delete_after_delay, file_path)
 
-    print("3. Starting transcription")
     transcript = audioTotext(file_path)
-    print("4. Transcription done")
-
-    print("5. Calling Mistral")
     result = await generate_response(topic, transcript)
-    print("6. Mistral response received")
 
     record = SpeechRecord(
         transcript=transcript,
@@ -123,13 +115,11 @@ async def upload_audio(
         feedback=result["feedback"],
     )
 
-    print("7. Saving to MongoDB")
 
     final_result = await speeches_collection.insert_one(
         record.model_dump(exclude={"id"}, by_alias=False)
     )
 
-    print("8. Done")
 
     return {
         "message": "Audio uploaded successfully",
