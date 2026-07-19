@@ -3,6 +3,8 @@ from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 import ast
+from langchain_core.output_parsers import JsonOutputParser
+import asyncio
 load_dotenv()
 llm = ChatMistralAI(model="mistral-small-latest", temperature=0)
 
@@ -18,13 +20,13 @@ Format:
 {{"score": <number 1-10>, "summary": "<one sentence>", "feedback": "<3-4 sentences>", "content_sufficiency": "<one sentence>"}}"""),
     ("user", "Here is the topic {topic} and the transcript : {transcript}")
 ])
-chain = prompt | llm
+chain = prompt | llm | JsonOutputParser()
 
 async def generate_response(topic: str, transcript: str) -> dict:
-    result = chain.invoke({
+    result = await chain.ainvoke({
         "topic": topic,
         "transcript": transcript if transcript else "Transcript Not provided"
     })
-    if len(result.content) == 0:
-        raise ValueError("Data is not sufficient")
-    return ast.literal_eval(result.content)
+    return result
+
+
