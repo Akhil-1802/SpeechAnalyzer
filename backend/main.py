@@ -95,24 +95,46 @@ async def upload_audio(
     topic: str = Form(default=None),
     current_user: dict = Depends(get_current_user),
 ):
+    print("1. Endpoint hit")
+
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    print("2. File saved")
+
     background_tasks.add_task(delete_after_delay, file_path)
 
-    with open(file_path, "rb") as f:
-        audio_data = f.read()
-
+    print("3. Starting transcription")
     transcript = audioTotext(file_path)
-    result = await generate_response(topic,transcript)
-    record = SpeechRecord(transcript=transcript, topic=topic, user_id=current_user["id"],score =result['score'] , summary = result['summary'],feedback = result['feedback'])
+    print("4. Transcription done")
+
+    print("5. Calling Mistral")
+    result = await generate_response(topic, transcript)
+    print("6. Mistral response received")
+
+    record = SpeechRecord(
+        transcript=transcript,
+        topic=topic,
+        user_id=current_user["id"],
+        score=result["score"],
+        summary=result["summary"],
+        feedback=result["feedback"],
+    )
+
+    print("7. Saving to MongoDB")
+
     final_result = await speeches_collection.insert_one(
         record.model_dump(exclude={"id"}, by_alias=False)
     )
-    doc_id = str(final_result.inserted_id)
-    return {"message": "Audio uploaded successfully", "transcript": transcript, "record_id": doc_id}
+
+    print("8. Done")
+
+    return {
+        "message": "Audio uploaded successfully",
+        "record_id": str(final_result.inserted_id),
+    }
 
 
 # ── Result polling ────────────────────────────────────────────────────────────
