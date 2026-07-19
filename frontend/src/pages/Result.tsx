@@ -107,6 +107,7 @@ export default function Result() {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
+          
           setResult(res.data);
         }
       } catch (e) {
@@ -170,14 +171,14 @@ export default function Result() {
           </h1>
         </motion.div>
 
-        {/* Transcript — shown immediately */}
-        {initialTranscript && (
+        {/* Transcript — shown immediately if available, otherwise after result loads */}
+        {(initialTranscript || result?.transcript) && (
           <AnalysisCard delay={0.2} label="Your Transcript" icon={
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           }>
-            <p className="text-white/70 text-base leading-8 font-light">{initialTranscript}</p>
+            <p className="text-white/70 text-base leading-8 font-light">{initialTranscript || result?.transcript}</p>
           </AnalysisCard>
         )}
 
