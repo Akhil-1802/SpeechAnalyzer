@@ -51,7 +51,7 @@ class LoginBody(BaseModel):
     password: str
 
 @app.get("/health")
-def healthcheck(request:Request, body : RegisterBody):
+def healthcheck(request:Request):
     return {"status":"ok"}
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
