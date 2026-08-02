@@ -50,7 +50,9 @@ class LoginBody(BaseModel):
     email: str
     password: str
 
-
+@app.get("/health")
+def healthcheck(request:Request, body : RegisterBody):
+    return {"status":"ok"}
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
 async def register(request: Request, body: RegisterBody):
