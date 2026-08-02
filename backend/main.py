@@ -53,6 +53,11 @@ class LoginBody(BaseModel):
 @app.get("/health")
 def healthcheck(request:Request):
     return {"status":"ok"}
+
+@app.head("/health")
+def health(request:Request):
+    return {"status":"ok"}
+
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
 async def register(request: Request, body: RegisterBody):
